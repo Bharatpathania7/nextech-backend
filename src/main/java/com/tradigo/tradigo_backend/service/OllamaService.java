@@ -15,7 +15,7 @@ public class OllamaService {
         String url = "http://localhost:11434/api/generate";
 
         Map<String, Object> request = Map.of(
-                "model", "mistral",
+                "model", "tinyllama",
                 "prompt", prompt,
                 "stream", false
         );
