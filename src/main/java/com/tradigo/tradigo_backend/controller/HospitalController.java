@@ -21,7 +21,7 @@ public class HospitalController {
     }
 
     // 🔹 Update hospital resources
-    @PutMapping("/update")
+    @PutMapping("/me")
     public ResponseEntity<Hospital> updateMyHospital(@RequestBody Hospital updatedData) {
         return ResponseEntity.ok(hospitalService.updateMyHospital(updatedData));
     }

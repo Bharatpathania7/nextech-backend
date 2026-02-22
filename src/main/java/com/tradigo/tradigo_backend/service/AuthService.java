@@ -25,10 +25,6 @@ public class AuthService {
             throw new RuntimeException("Hospital ID already registered");
         }
 
-        if (!request.getPassword().equals(request.getConfirmpass())) {
-            throw new RuntimeException("Passwords do not match");
-        }
-
         User user = User.builder()
                 .name(request.getName())
                 .hospitalid(request.getHospitalid())
