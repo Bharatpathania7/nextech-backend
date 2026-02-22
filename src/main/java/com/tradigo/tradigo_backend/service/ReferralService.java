@@ -6,7 +6,6 @@ import com.tradigo.tradigo_backend.model.Hospital;
 import com.tradigo.tradigo_backend.model.Referral;
 import com.tradigo.tradigo_backend.repository.HospitalRepository;
 import com.tradigo.tradigo_backend.repository.ReferralRepository;
-//import com.tradigo.tradigo_backend.util.DistanceUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -27,14 +26,21 @@ public class ReferralService {
 
         List<Hospital> hospitals = hospitalRepository.findAll();
 
-        // 1️⃣ Filter based on needs
+        if (hospitals.isEmpty()) {
+            throw new RuntimeException("No hospitals available");
+        }
+
+        // 1️⃣ Filter hospitals
         List<Hospital> filtered = hospitals.stream()
                 .filter(h -> !request.isNeedsICU() || h.isIcuAvailable())
                 .filter(h -> !request.isNeedsVentilator() || h.getVentilatorCount() > 0)
                 .toList();
 
-        // 2️⃣ Sort by nearest distance
+        if (filtered.isEmpty()) {
+            filtered = hospitals; // fallback if nothing matches
+        }
 
+        // 2️⃣ Sort by nearest
         List<Hospital> nearest = filtered.stream()
                 .sorted(Comparator.comparingDouble(h ->
                         distanceUtil.calculateDistance(
@@ -46,13 +52,20 @@ public class ReferralService {
                 .limit(5)
                 .toList();
 
-        // 3️⃣ Build LLM prompt
+        Hospital bestHospital = nearest.get(0); // safe fallback
+
+        // 3️⃣ Build prompt
         String prompt = buildPrompt(request, nearest);
 
-        String llmResponse = ollamaService.analyze(prompt);
+        String llmResponse;
 
-        Hospital bestHospital = nearest.get(0); // fallback
+        try {
+            llmResponse = ollamaService.analyze(prompt);
+        } catch (Exception e) {
+            llmResponse = "AI service temporarily unavailable. Selected nearest hospital.";
+        }
 
+        // 4️⃣ Save referral
         Referral referral = Referral.builder()
                 .patientName(request.getPatientName())
                 .disease(request.getDisease())
@@ -73,33 +86,33 @@ public class ReferralService {
         return referralRepository.save(referral);
     }
 
-    private String buildPrompt(ReferralRequest request,
-                               List<Hospital> hospitals) {
+    private String buildPrompt(ReferralRequest request, List<Hospital> hospitals) {
 
         return """
-                You are a medical referral AI.
+You are a medical emergency referral AI.
 
-                Patient:
-                Disease: %s
-                Blood Pressure: %s
-                Oxygen Level: %s
-                Heart Rate: %s
-                Needs ICU: %s
-                Needs Ventilator: %s
+Analyze patient vitals and hospital capabilities.
 
-                Hospitals Available:
-                %s
+Patient:
+Disease: %s
+Blood Pressure: %s
+Oxygen Level: %s
+Heart Rate: %s
+Needs ICU: %s
+Needs Ventilator: %s
 
-                Select the best hospital and explain why.
-                """
-                .formatted(
-                        request.getDisease(),
-                        request.getBloodPressure(),
-                        request.getOxygenLevel(),
-                        request.getHeartRate(),
-                        request.isNeedsICU(),
-                        request.isNeedsVentilator(),
-                        hospitals.toString()
-                );
+Available Hospitals:
+%s
+
+Choose the BEST hospital and explain briefly why.
+""".formatted(
+                request.getDisease(),
+                request.getBloodPressure(),
+                request.getOxygenLevel(),
+                request.getHeartRate(),
+                request.isNeedsICU(),
+                request.isNeedsVentilator(),
+                hospitals
+        );
     }
 }
